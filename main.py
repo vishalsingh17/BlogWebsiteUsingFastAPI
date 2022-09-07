@@ -1,32 +1,39 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, status, Response, HTTPException
 from typing import Optional
 from pydantic import BaseModel
+from blog import schemas, models
+from blog.database import engine, SessionLocal
+from sqlalchemy.orm import Session
 
 app = FastAPI()
 
-@app.get('/')
-def index(limit = 10, published:bool = True, sort:Optional[str] = None):
-    if published:
-        return f"{limit} published blogs from the database"
-    return f"{limit} blogs from the database"
+models.Base.metadata.create_all(engine)
 
-@app.get('/unpublsihed')
-def unpublished():
-    return {"data": "unpublished"}
+def get_db():
+    db = SessionLocal()
+
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.post('/blog', status_code=status.HTTP_201_CREATED)
+def create_blog(request: schemas.Blog, db:Session = Depends(get_db)):
+    new_blog = models.Blog(title=request.title, body=request.body)
+    db.add(new_blog)
+    db.commit()
+    db.refresh(new_blog)
+    return new_blog
+
+@app.get('/blog')
+def get_blog(db: Session = Depends(get_db)):
+    blogs = db.query(models.Blog).all()
+    return blogs
 
 @app.get('/blog/{id}')
-def show(id :  int):
-    return {"data": id}
+def get_blog_by_id(id: int, response: Response, db: Session = Depends(get_db)):
+    blog = db.query(models.Blog).where(models.Blog.id==id).first()
+    if not blog:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail = f"Blog with the {id} not found!!")
+    return blog
 
-@app.get('/blog/{id}/comments')
-def get_comments(id):
-    return {"data": {"1", "2"}}
-
-class CreateBlog(BaseModel):
-    title:str
-    body: str
-    published: Optional[bool]
-
-@app.post('/create_blog')
-def create_blog(blog_create:CreateBlog):
-    return f"Blog title is '{blog_create.title}' and body is '{blog_create.body}'"
