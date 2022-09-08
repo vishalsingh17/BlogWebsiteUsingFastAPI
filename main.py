@@ -4,8 +4,7 @@ from pydantic import BaseModel
 from blog import schemas, models
 from blog.database import engine, SessionLocal
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
-
+from blog.hashing import Hash
 
 app = FastAPI()
 
@@ -57,12 +56,10 @@ def get_blog_by_id(id: int, response: Response, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail = f"Blog with the {id} not found!!")
     return blog
 
-pwd_cxt = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 @app.post('/user')
 def create_user(request:schemas.User, db:Session = Depends(get_db)):
-    hashedpwd = pwd_cxt.hash(request.password)
-    new_user = models.User(name=request.name, email=request.email, password=hashedpwd)
+    new_user = models.User(name=request.name, email=request.email, password=Hash.bcrypt(request.password))
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
